@@ -23,7 +23,9 @@ import {
   ArrowLeft,
   Folder,
   HelpCircle,
-  FolderSymlink
+  FolderSymlink,
+  Users,
+  Check
 } from "lucide-react";
 import { listDriveSubfolders } from "../utils/googleService";
 
@@ -50,12 +52,13 @@ export default function Tab3Camera({
   const [selectedFolderName, setSelectedFolderName] = useState("");
 
   // Directory Browser local states
-  const [browsingFolderId, setBrowsingFolderId] = useState(() => localStorage.getItem("fda_root_folder_id") || "root");
+  const [browsingFolderId, setBrowsingFolderId] = useState("root");
   const [browsingFolders, setBrowsingFolders] = useState<{ id: string; name: string }[]>([]);
   const [historyStack, setHistoryStack] = useState<{ id: string; name: string }[]>([
     { id: "root", name: "Mi Unidad" }
   ]);
   const [isLoadingFolders, setIsLoadingFolders] = useState(false);
+  const [browsingError, setBrowsingError] = useState("");
 
   // Synchronize dynamic browsing folders on token change or browsing ID change
   useEffect(() => {
@@ -63,20 +66,29 @@ export default function Tab3Camera({
       loadSubfolders(browsingFolderId);
     } else {
       setBrowsingFolders([]);
+      setBrowsingError("");
     }
   }, [browsingFolderId, accessToken]);
 
   const loadSubfolders = async (folderId: string) => {
     setIsLoadingFolders(true);
+    setBrowsingError("");
     try {
       const folders = await listDriveSubfolders(accessToken!, folderId);
       setBrowsingFolders(folders);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error al navegar por carpetas de Google Drive:", err);
+      setBrowsingError(err.message || String(err));
       setBrowsingFolders([]);
     } finally {
       setIsLoadingFolders(false);
     }
+  };
+
+  const handleResetToRoot = () => {
+    setHistoryStack([{ id: "root", name: "Mi Unidad" }]);
+    setBrowsingFolderId("root");
+    setBrowsingError("");
   };
 
   const handleEnterFolder = (id: string, name: string) => {
@@ -196,35 +208,80 @@ export default function Tab3Camera({
                       <RefreshCw className="w-6 h-6 animate-spin text-sky-600 mx-auto" />
                       <span>Cargando carpetas de Drive...</span>
                     </div>
+                  ) : browsingError ? (
+                    <div className="p-6 text-center text-xs text-rose-600 bg-rose-50 rounded-xl space-y-3 m-2 border border-rose-100">
+                      <AlertCircle className="w-8 h-8 text-rose-500 mx-auto" />
+                      <div>
+                        <span className="font-bold block">Error al cargar carpetas</span>
+                        <span className="text-[10px] text-rose-500 block mt-1">{browsingError}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleResetToRoot}
+                        className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-[10px] px-3.5 py-1.5 rounded-lg transition-colors cursor-pointer"
+                      >
+                        🔄 Volver a Mi Unidad (Raíz)
+                      </button>
+                    </div>
                   ) : browsingFolders.length === 0 ? (
                     <div className="p-8 text-center text-xs text-slate-400 space-y-1">
                       <Folder className="w-8 h-8 text-slate-300 mx-auto" />
                       <span className="font-bold block">No hay subcarpetas</span>
                       <span className="text-[10px] text-slate-400 block mt-0.5">Esta carpeta de Google Drive no contiene subcarpetas.</span>
+                      <button
+                        type="button"
+                        onClick={handleResetToRoot}
+                        className="mt-2 text-sky-600 hover:underline font-bold block mx-auto text-[10px] cursor-pointer"
+                      >
+                        Ir a la Raíz de Mi Unidad
+                      </button>
                     </div>
                   ) : (
                     browsingFolders.map((folder) => {
                       const isActiveSelection = selectedFolderId === folder.id;
+                      const isShared = folder.isSharedWithMe || folder.shared;
+                      const isEditable = folder.capabilities?.canAddChildren !== false;
+                      const ownerName = folder.owners?.[0]?.displayName || "";
+
                       return (
                         <div
                           key={folder.id}
-                          className={`p-3 flex items-center justify-between hover:bg-slate-50 transition-all rounded-lg ${
-                            isActiveSelection ? "bg-sky-50 border border-sky-100" : ""
+                          className={`p-3 flex flex-col sm:flex-row sm:items-center justify-between hover:bg-slate-50 transition-all rounded-lg gap-2 border-b border-slate-100 last:border-none ${
+                            isActiveSelection ? "bg-sky-50/75 border border-sky-100" : ""
                           }`}
                         >
-                          <div className="flex items-center gap-3 truncate min-w-0 pr-2">
-                            <Folder className={`w-5 h-5 shrink-0 ${isActiveSelection ? "text-sky-600" : "text-slate-400"}`} />
-                            <div className="truncate text-left">
+                          <div className="flex items-start gap-3 truncate min-w-0 pr-2">
+                            <Folder className={`w-5 h-5 shrink-0 mt-0.5 ${isActiveSelection ? "text-sky-600" : "text-slate-400"}`} />
+                            <div className="truncate text-left space-y-1">
                               <span className="text-xs font-bold text-slate-800 truncate block">
                                 {folder.name}
                               </span>
-                              <span className="text-[9px] text-slate-400 font-mono block truncate">
-                                ID: {folder.id}
-                              </span>
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="text-[9px] text-slate-400 font-mono">
+                                  ID: {folder.id}
+                                </span>
+                                {isShared && (
+                                  <span className="bg-purple-100 text-purple-800 text-[8px] font-bold px-1.5 py-0.5 rounded flex items-center gap-0.5" title={ownerName ? `Propietario: ${ownerName}` : ""}>
+                                    <Users className="w-2 h-2" />
+                                    Compartido {ownerName && `(${ownerName})`}
+                                  </span>
+                                )}
+                                {isEditable ? (
+                                  <span className="bg-emerald-100 text-emerald-800 text-[8px] font-bold px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                                    <Check className="w-2.5 h-2.5" />
+                                    Editable (Editor)
+                                  </span>
+                                ) : (
+                                  <span className="bg-amber-100 text-amber-800 text-[8px] font-bold px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                                    <Lock className="w-2 h-2" />
+                                    Solo Lectura
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </div>
 
-                          <div className="flex gap-2 shrink-0">
+                          <div className="flex gap-2 shrink-0 self-end sm:self-auto">
                             <button
                               type="button"
                               onClick={() => handleEnterFolder(folder.id, folder.name)}
@@ -266,10 +323,24 @@ export default function Tab3Camera({
                 <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-xl flex items-center justify-between gap-3 shadow-sm animate-fadeIn">
                   <div className="flex items-start gap-3">
                     <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-                    <div className="text-xs text-emerald-900 leading-tight">
+                    <div className="text-xs text-emerald-900 leading-tight space-y-1">
                       <span className="font-bold block">Ubicación de Fotos Seleccionada:</span>
                       <span className="text-emerald-700 block mt-0.5 font-bold">{selectedFolderName}</span>
-                      <span className="text-[9px] text-emerald-600 block mt-0.5 font-mono">ID: {selectedFolderId}</span>
+                      <span className="text-[9px] text-emerald-600 block font-mono">ID: {selectedFolderId}</span>
+                      
+                      {browsingFolders.find(f => f.id === selectedFolderId) && (
+                        <div className="pt-1 flex items-center gap-1.5">
+                          {browsingFolders.find(f => f.id === selectedFolderId)?.capabilities?.canAddChildren !== false ? (
+                            <span className="bg-emerald-100 text-emerald-800 text-[9px] font-bold px-2 py-0.5 rounded-full flex items-center gap-0.5">
+                              ✍️ Disponible para Editar (Editor)
+                            </span>
+                          ) : (
+                            <span className="bg-amber-100 text-amber-800 text-[9px] font-bold px-2 py-0.5 rounded-full flex items-center gap-0.5">
+                              🔒 Solo Lectura (Solo visualización de fotos)
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <button

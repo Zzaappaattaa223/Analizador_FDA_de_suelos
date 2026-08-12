@@ -124,10 +124,14 @@ export default function App() {
   const handleLoadCloudExperiments = async () => {
     setIsLoadingCloud(true);
     try {
-      const exps = await getExperimentsFromCloud();
+      const loadPromise = getExperimentsFromCloud();
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Tiempo de espera agotado al conectar con Firestore.")), 6000)
+      );
+      const exps = await Promise.race([loadPromise, timeoutPromise]);
       setCloudExperiments(exps);
     } catch (err) {
-      console.error("Error al cargar experimentos de Firestore:", err);
+      console.warn("Error al cargar experimentos de Firestore o tiempo de espera agotado:", err);
     } finally {
       setIsLoadingCloud(false);
     }
@@ -136,19 +140,27 @@ export default function App() {
   const handleSaveToCloud = async () => {
     setIsSavingToCloud(true);
     try {
-      const docId = await saveExperimentToCloud(
+      const savePromise = saveExperimentToCloud(
         metadata.idSesion,
         metadata,
         prep,
         camera,
         roi,
         kinetics,
-        samples
+        samples,
+        selectedFolderId,
+        driveImages,
+        kineticsProcessed
       );
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Tiempo de espera agotado. Por favor, verifique que la base de datos esté activa en su panel y tenga conexión.")), 8000)
+      );
+      const docId = await Promise.race([savePromise, timeoutPromise]) as string;
+      
       alert(`✅ Ensayo "${metadata.nombreExp}" guardado con éxito en Cloud Firestore!\nID del documento: ${docId}`);
       await handleLoadCloudExperiments();
     } catch (err: any) {
-      alert(`Error al guardar en Firestore: ${err.message || err}`);
+      alert(`⚠️ Error al guardar en Firestore: ${err.message || err}`);
     } finally {
       setIsSavingToCloud(false);
     }
@@ -162,8 +174,10 @@ export default function App() {
     setRoi(exp.roi);
     setKinetics(exp.kinetics);
     setSamples(exp.samples);
-    setKineticsProcessed(true); // Since it was saved with computed kinetics
-    alert(`✅ Sesión "${exp.metadata.nombreExp}" recuperada de Cloud Firestore exitosamente! Todos los canales y mediciones han sido restaurados.`);
+    setSelectedFolderId(exp.selectedFolderId || "");
+    setDriveImages(exp.driveImages || []);
+    setKineticsProcessed(exp.kineticsProcessed || false);
+    alert(`✅ Sesión "${exp.metadata.nombreExp}" recuperada de Cloud Firestore exitosamente! Se ha restaurado la navegación de Drive, las fotos y todos los canales de medición.`);
   };
 
   const handleDeleteFromCloud = async (id: string) => {

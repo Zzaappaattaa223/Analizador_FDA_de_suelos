@@ -19,6 +19,13 @@ export interface GoogleDriveFile {
   id: string;
   name: string;
   createdTime: string;
+  isSharedWithMe?: boolean;
+  shared?: boolean;
+  capabilities?: {
+    canAddChildren?: boolean;
+    canEdit?: boolean;
+  };
+  owners?: { displayName: string; emailAddress?: string }[];
 }
 
 // Inicializar Firebase
@@ -55,7 +62,7 @@ export async function listDriveSubfolders(
 ): Promise<GoogleDriveFile[]> {
   const activeParentId = parentFolderId || localStorage.getItem("fda_root_folder_id") || DEFAULT_ROOT_FOLDER_ID;
   const query = `'${activeParentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
-  const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,createdTime)&orderBy=name`;
+  const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,createdTime,capabilities,shared,owners)&orderBy=name`;
 
   const response = await fetch(url, {
     headers: { Authorization: `Bearer ${accessToken}` },
@@ -67,7 +74,40 @@ export async function listDriveSubfolders(
   }
 
   const data = await response.json();
-  return data.files || [];
+  let folders: GoogleDriveFile[] = data.files || [];
+
+  // If we are at the root, also append folders that are explicitly shared with the user
+  if (activeParentId === "root") {
+    try {
+      const sharedQuery = `sharedWithMe = true and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+      const sharedUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(sharedQuery)}&fields=files(id,name,createdTime,capabilities,shared,owners)&orderBy=name`;
+      
+      const sharedResponse = await fetch(sharedUrl, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      
+      if (sharedResponse.ok) {
+        const sharedData = await sharedResponse.json();
+        const sharedFolders: GoogleDriveFile[] = (sharedData.files || []).map((f: any) => ({
+          ...f,
+          isSharedWithMe: true,
+          shared: true
+        }));
+        
+        // Merge without duplicate IDs
+        const existingIds = new Set(folders.map(f => f.id));
+        sharedFolders.forEach(sf => {
+          if (!existingIds.has(sf.id)) {
+            folders.push(sf);
+          }
+        });
+      }
+    } catch (e) {
+      console.warn("No se pudieron cargar carpetas compartidas con el usuario:", e);
+    }
+  }
+
+  return folders;
 }
 
 /**

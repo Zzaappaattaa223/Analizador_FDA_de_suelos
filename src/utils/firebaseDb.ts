@@ -28,7 +28,7 @@ import {
 
 // Initialize Firebase App gracefully
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
-export const db = getFirestore(app);
+export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 
 export interface SavedExperiment {
   id: string;
@@ -39,6 +39,9 @@ export interface SavedExperiment {
   kinetics: KineticsConfig;
   samples: SampleData[];
   createdAt: string;
+  selectedFolderId?: string;
+  driveImages?: any[];
+  kineticsProcessed?: boolean;
 }
 
 const EXPERIMENTS_COLLECTION = "experiments";
@@ -53,7 +56,10 @@ export async function saveExperimentToCloud(
   camera: CameraConfig,
   roi: RoiConfig,
   kinetics: KineticsConfig,
-  samples: SampleData[]
+  samples: SampleData[],
+  selectedFolderId?: string,
+  driveImages?: any[],
+  kineticsProcessed?: boolean
 ): Promise<string> {
   const docId = idSesion || `EXP-${Date.now()}`;
   const docRef = doc(db, EXPERIMENTS_COLLECTION, docId);
@@ -65,7 +71,10 @@ export async function saveExperimentToCloud(
     roi,
     kinetics,
     samples,
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    selectedFolderId,
+    driveImages,
+    kineticsProcessed
   };
 
   await setDoc(docRef, payload, { merge: true });
@@ -91,7 +100,10 @@ export async function getExperimentsFromCloud(): Promise<SavedExperiment[]> {
         roi: data.roi,
         kinetics: data.kinetics,
         samples: data.samples || [],
-        createdAt: data.createdAt || ""
+        createdAt: data.createdAt || "",
+        selectedFolderId: data.selectedFolderId || "",
+        driveImages: data.driveImages || [],
+        kineticsProcessed: data.kineticsProcessed || false
       });
     });
 
