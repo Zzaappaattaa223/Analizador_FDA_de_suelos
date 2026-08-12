@@ -1,0 +1,6 @@
+{
+  "name": "Analizador FDA de Suelos",
+  "description": "Plataforma modular para el registro, preprocesamiento de suelo, configuración de cámara, segmentación de ROIs y análisis cinético de hidrólisis de diacetato de fluoresceína (FDA) en sensores ópticos.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
